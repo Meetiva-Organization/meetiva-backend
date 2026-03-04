@@ -1,8 +1,9 @@
 name: CD
 
 on:
-  push:
+  pull_request:
     branches: [main]
+    types: [closed]
 
 env:
   REGISTRY: ghcr.io
@@ -12,6 +13,7 @@ jobs:
   build-and-push:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
     permissions:
       contents: read
       packages: write
