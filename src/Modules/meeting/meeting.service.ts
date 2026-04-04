@@ -109,7 +109,7 @@ export class MeetingService {
   async leaveMeeting(
     roomId: string,
     userId: string,
-  ): Promise<{ message: string }> {
+  ): Promise<{ message: string; isMeetingEnded: boolean }> {
     const meeting = await this.meetingRepo.findOne({
       where: { roomId, isActive: true },
     });
@@ -129,8 +129,15 @@ export class MeetingService {
       await this.participantRepo.save(participant);
     }
 
+    if (meeting.hostId === userId) {
+      meeting.isActive = false;
+      meeting.endedAt = new Date();
+      await this.meetingRepo.save(meeting);
+      await this.redisService.clearRoom(roomId);
+      return { message: 'Meeting ended.', isMeetingEnded: true };
+    }
     //redis
     await this.redisService.removeParticipant(roomId, userId);
-    return { message: 'Successfully left the meeting.' };
+    return { message: 'Successfully left the meeting.', isMeetingEnded: false };
   }
 }

@@ -4,10 +4,14 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type { Request } from 'express';
 import type { JwtPayload } from '../auth/interfaces/auth.interface';
 import { MeetingResponseDto } from './dto/meeting-response.dto';
+import { MeetingGateway } from '../socket/meeting.gateway';
 
 @Controller('meeting')
 export class MeetingController {
-  constructor(private meetingService: MeetingService) {}
+  constructor(
+    private meetingService: MeetingService,
+    private meetingGateway: MeetingGateway,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -35,11 +39,12 @@ export class MeetingController {
 
   @Post(':roomId/leave')
   @UseGuards(JwtAuthGuard)
-  leaveMeeting(
-    @Param('roomId') roomId: string,
-    @Req() req: Request,
-  ): Promise<{ message: string }> {
+  async leaveMeeting(@Param('roomId') roomId: string, @Req() req: Request) {
     const user = req.user as JwtPayload;
-    return this.meetingService.leaveMeeting(roomId, user.id);
+    const result = await this.meetingService.leaveMeeting(roomId, user.id);
+    if (result.isMeetingEnded) {
+      this.meetingGateway.server.to(roomId).emit('meeting-ended');
+    }
+    return result;
   }
 }

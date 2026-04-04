@@ -9,6 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { MediasoupService } from '../mediasoup/mediasoup.service';
+import { RedisService } from '../redis/redis.service';
 import { Logger } from '@nestjs/common';
 import {
   Consumer,
@@ -17,6 +18,7 @@ import {
   RtpCapabilities,
   RtpParameters,
 } from 'mediasoup/types';
+import { SocketUser } from './interfaces/socket.interface';
 
 @WebSocketGateway({
   cors: {
@@ -34,18 +36,62 @@ export class MeetingGateway
   private clientConsumers = new Map<string, string[]>();
   private consumers = new Map<string, Consumer>();
   private producers = new Map<string, Producer>();
+  private socketToRoom = new Map<string, string>();
+  private socketToUser = new Map<string, SocketUser>();
   @WebSocketServer()
   server: Server;
 
   private readonly logger = new Logger(MeetingGateway.name);
 
-  constructor(private readonly mediasoupService: MediasoupService) {}
+  constructor(
+    private readonly mediasoupService: MediasoupService,
+    private readonly redisService: RedisService,
+  ) {}
 
   handleDisconnect(client: Socket) {
     this.logger.log(`[+] Client vừa kết nối: ${client.id}`);
+    const roomId = this.socketToRoom.get(client.id);
+    const user = this.socketToUser.get(client.id);
+
+    if (roomId) {
+      this.server.to(roomId).emit('user-left', {
+        socketId: client.id,
+        user,
+      });
+
+      if (user && user.id) {
+        void this.redisService
+          .removeParticipant(roomId, user.id)
+          .catch((err: unknown) => {
+            this.logger.error(
+              `Error removing participant from redis: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          });
+      }
+
+      this.socketToRoom.delete(client.id);
+      this.socketToUser.delete(client.id);
+    }
   }
   handleConnection(client: Socket) {
     this.logger.log(`[+] Client vừa kết nối: ${client.id}`);
+  }
+
+  @SubscribeMessage('join-room')
+  handleJoinRoom(
+    @MessageBody() data: { roomId: string; user: SocketUser },
+    @ConnectedSocket() client: Socket,
+  ) {
+    void client.join(data.roomId);
+
+    this.socketToRoom.set(client.id, data.roomId);
+    this.socketToUser.set(client.id, data.user);
+
+    client.to(data.roomId).emit('user-joined', {
+      socketId: client.id,
+      user: data.user,
+    });
+    return { joined: true };
   }
 
   @SubscribeMessage('getRouterRtpCapabilities')

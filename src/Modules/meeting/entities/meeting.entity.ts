@@ -21,6 +21,8 @@ export class Meeting {
   hostId: string;
   @Column({ default: true })
   isActive: boolean;
+  @Column({ type: 'timestamp', nullable: true })
+  endedAt: Date | null;
   @CreateDateColumn()
   createdAt: Date;
 }
