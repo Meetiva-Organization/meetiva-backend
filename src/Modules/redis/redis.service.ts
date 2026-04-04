@@ -38,6 +38,11 @@ export class RedisService implements OnModuleDestroy {
     await this.redisClient.hdel(key, userId);
   }
 
+  async clearRoom(roomId: string): Promise<void> {
+    const key = `meeting:${roomId}:participants`;
+    await this.redisClient.del(key);
+  }
+
   // 3. Lấy toàn bộ người dùng đang online trong 1 phòng
   async getParticipants(roomId: string): Promise<IParticipant[]> {
     const key = `meeting:${roomId}:participants`;
